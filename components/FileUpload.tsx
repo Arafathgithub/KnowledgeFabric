@@ -1,4 +1,3 @@
-
 import React, { useRef, useState, ChangeEvent } from 'react';
 import { UploadIcon, DocumentIcon, LoadingSpinner, TrashIcon } from './icons';
 
@@ -35,6 +34,22 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileUpload, isLoading,
     setFileName('');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+  };
+
+  const handleLoadSample = async () => {
+    if (isLoading) return;
+    try {
+      const response = await fetch('/sample-document.txt');
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+      const text = await response.text();
+      setFileName('sample-document.txt');
+      onFileUpload(text);
+    } catch (error) {
+      console.error("Failed to load sample document:", error);
+      // You could add some user-facing error state here
     }
   };
   
@@ -79,16 +94,16 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileUpload, isLoading,
         <div className="mb-6">
           <h3 className="font-semibold text-gray-300 mb-2">Don't have a file?</h3>
           <p className="text-sm text-slate-400 mb-4">
-            Download our sample document to see how it works.
+            Load our sample document to see how it works.
           </p>
-          <a
-            href="/sample-document.txt"
-            download="sample-document.txt"
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-slate-700 text-gray-200 rounded-lg font-semibold hover:bg-slate-600 transition-all duration-200"
+          <button
+            onClick={handleLoadSample}
+            disabled={isLoading}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-slate-700 text-gray-200 rounded-lg font-semibold hover:bg-slate-600 transition-all duration-200 disabled:bg-slate-600 disabled:cursor-not-allowed"
           >
             <DocumentIcon className="w-5 h-5" />
-            Download Sample
-          </a>
+            Load Sample Document
+          </button>
         </div>
         
         <div>
