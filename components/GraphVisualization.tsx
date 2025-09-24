@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { GraphData, Node, Link } from '../types';
 import { SearchIcon } from './icons';
@@ -155,7 +154,8 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({ data, on
     const query = searchQuery.trim().toLowerCase();
 
     // Node Type Filtering
-    const typeFilteredNodeIds = new Set(data.nodes.filter(n => selectedNodeTypes.has(n.type)).map(n => n.id));
+    // FIX: Explicitly type Set to avoid TypeScript inferring Set<unknown>
+    const typeFilteredNodeIds = new Set<string>(data.nodes.filter(n => selectedNodeTypes.has(n.type)).map(n => n.id));
 
     let finalVisibleNodeIds: Set<string>;
 
@@ -163,13 +163,14 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({ data, on
       finalVisibleNodeIds = typeFilteredNodeIds;
     } else {
       // Search Filtering (on top of type filter)
-      const matchingNodeIds = new Set(
+      // FIX: Explicitly type Set to avoid TypeScript inferring Set<unknown>
+      const matchingNodeIds = new Set<string>(
         data.nodes
           .filter(n => typeFilteredNodeIds.has(n.id) && (n.id.toLowerCase().includes(query) || n.label.toLowerCase().includes(query)))
           .map(n => n.id)
       );
       
-      const searchVisibleNodeIds = new Set(matchingNodeIds);
+      const searchVisibleNodeIds = new Set<string>(matchingNodeIds);
       data.links.forEach((l: Link) => {
         // A link can make a node visible only if both its source and target are of a selected type
         if (typeFilteredNodeIds.has(l.source) && typeFilteredNodeIds.has(l.target)) {

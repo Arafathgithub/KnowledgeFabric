@@ -1,4 +1,3 @@
-
 import React, { useRef, useState, ChangeEvent } from 'react';
 import { UploadIcon, DocumentIcon, LoadingSpinner, TrashIcon, DownloadIcon, PanelCollapseIcon } from './icons';
 
@@ -109,18 +108,20 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         {uniqueNodeTypes.length > 0 && (
           <div className="mb-6">
             <h3 className="text-sm font-semibold text-gray-300 mb-3">Node Type Filters</h3>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-              {uniqueNodeTypes.map(type => (
-                <label key={type} className="flex items-center space-x-2 text-sm text-gray-200 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={selectedNodeTypes.has(type)}
-                    onChange={(e) => onNodeTypeChange(type, e.target.checked)}
-                    className="h-4 w-4 rounded bg-slate-700 border-slate-500 text-cyan-500 focus:ring-cyan-600"
-                  />
-                  <span className="truncate" title={type}>{type}</span>
-                </label>
-              ))}
+            <div className="max-h-32 overflow-y-auto custom-scrollbar border border-slate-700 rounded-lg p-3 bg-slate-900/30">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                {uniqueNodeTypes.map(type => (
+                  <label key={type} className="flex items-center space-x-2 text-sm text-gray-200 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedNodeTypes.has(type)}
+                      onChange={(e) => onNodeTypeChange(type, e.target.checked)}
+                      className="h-4 w-4 rounded bg-slate-700 border-slate-500 text-cyan-500 focus:ring-cyan-600"
+                    />
+                    <span className="truncate" title={type}>{type}</span>
+                  </label>
+                ))}
+              </div>
             </div>
           </div>
         )}
