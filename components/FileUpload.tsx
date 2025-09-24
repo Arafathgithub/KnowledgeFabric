@@ -11,6 +11,9 @@ interface FileUploadProps {
   onExportGraph: () => void;
   aiProvider: 'gemini' | 'azure';
   onAiProviderChange: (provider: 'gemini' | 'azure') => void;
+  uniqueNodeTypes: string[];
+  selectedNodeTypes: Set<string>;
+  onNodeTypeChange: (nodeType: string, isSelected: boolean) => void;
 }
 
 export const FileUpload: React.FC<FileUploadProps> = ({ 
@@ -21,7 +24,10 @@ export const FileUpload: React.FC<FileUploadProps> = ({
   onTogglePanel,
   onExportGraph,
   aiProvider,
-  onAiProviderChange
+  onAiProviderChange,
+  uniqueNodeTypes,
+  selectedNodeTypes,
+  onNodeTypeChange
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState<string>('');
@@ -77,10 +83,10 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       >
         <PanelCollapseIcon className="w-6 h-6" />
       </button>
-      <div>
+      <div className="flex-grow overflow-y-auto pr-2">
         <h2 className="text-xl font-semibold text-gray-100 mb-4">Controls</h2>
         
-        <div className="mb-4">
+        <div className="mb-6">
             <label className="text-sm font-semibold text-gray-300 mb-2 block">AI Provider</label>
             <div className="flex bg-slate-700 rounded-lg p-1">
                 <button
@@ -99,6 +105,25 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                 </button>
             </div>
         </div>
+
+        {uniqueNodeTypes.length > 0 && (
+          <div className="mb-6">
+            <h3 className="text-sm font-semibold text-gray-300 mb-3">Node Type Filters</h3>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+              {uniqueNodeTypes.map(type => (
+                <label key={type} className="flex items-center space-x-2 text-sm text-gray-200 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedNodeTypes.has(type)}
+                    onChange={(e) => onNodeTypeChange(type, e.target.checked)}
+                    className="h-4 w-4 rounded bg-slate-700 border-slate-500 text-cyan-500 focus:ring-cyan-600"
+                  />
+                  <span className="truncate" title={type}>{type}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
         
         <div className="flex flex-col space-y-4">
           <input
@@ -133,7 +158,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         </div>
       </div>
 
-      <div className="mt-auto pt-6 border-t border-slate-700">
+      <div className="mt-6 pt-6 border-t border-slate-700">
         <div className="mb-6">
           <h3 className="font-semibold text-gray-300 mb-2">Don't have a file?</h3>
           <p className="text-sm text-slate-400 mb-4">

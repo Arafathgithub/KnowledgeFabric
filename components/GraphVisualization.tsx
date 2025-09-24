@@ -1,16 +1,44 @@
 
-import React, { useEffect, useRef } from 'react';
-import { GraphData, Node } from '../types';
+import React, { useEffect, useRef, useState } from 'react';
+import { GraphData, Node, Link } from '../types';
+import { SearchIcon } from './icons';
 
 declare const d3: any;
 
 interface GraphVisualizationProps {
   data: GraphData;
   onNodeClick: (node: Node) => void;
+  selectedNodeTypes: Set<string>;
 }
 
-export const GraphVisualization: React.FC<GraphVisualizationProps> = ({ data, onNodeClick }) => {
+export const GraphVisualization: React.FC<GraphVisualizationProps> = ({ data, onNodeClick, selectedNodeTypes }) => {
   const svgRef = useRef<SVGSVGElement>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const selectionsRef = useRef<{ node?: any; link?: any; linkLabel?: any }>({});
+
+  const drag = (simulation: any) => {
+    function dragstarted(event: any, d: any) {
+      if (!event.active) simulation.alphaTarget(0.3).restart();
+      d.fx = d.x;
+      d.fy = d.y;
+    }
+    
+    function dragged(event: any, d: any) {
+      d.fx = event.x;
+      d.fy = event.y;
+    }
+    
+    function dragended(event: any, d: any) {
+      if (!event.active) simulation.alphaTarget(0);
+      d.fx = null;
+      d.fy = null;
+    }
+    
+    return d3.drag()
+      .on("start", dragstarted)
+      .on("drag", dragged)
+      .on("end", dragended);
+  }
 
   useEffect(() => {
     if (!data || !svgRef.current) return;
@@ -26,7 +54,6 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({ data, on
     const nodes = data.nodes.map(d => ({...d}));
     const links = data.links.map(d => ({...d}));
     
-    // Color scale for different node types
     const color = d3.scaleOrdinal(d3.schemeCategory10);
 
     const simulation = d3.forceSimulation(nodes)
@@ -88,14 +115,16 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({ data, on
     
     node.on("mouseover", (event: any, d: any) => {
         link
-            .attr("stroke", l => (l.source.id === d.id || l.target.id === d.id) ? "#06b6d4" : "#999")
-            .attr("stroke-opacity", l => (l.source.id === d.id || l.target.id === d.id) ? 1.0 : 0.6);
+            .attr("stroke", (l: any) => (l.source.id === d.id || l.target.id === d.id) ? "#06b6d4" : "#999")
+            .attr("stroke-opacity", (l: any) => (l.source.id === d.id || l.target.id === d.id) ? 1.0 : 0.6);
         linkLabel
-            .attr("fill", l => (l.source.id === d.id || l.target.id === d.id) ? "#06b6d4" : "#aaa");
+            .attr("fill", (l: any) => (l.source.id === d.id || l.target.id === d.id) ? "#06b6d4" : "#aaa");
     }).on("mouseout", () => {
         link.attr("stroke", "#999").attr("stroke-opacity", 0.6);
         linkLabel.attr("fill", "#aaa");
     });
+    
+    selectionsRef.current = { node, link, linkLabel };
 
     simulation.on("tick", () => {
       link
@@ -119,29 +148,68 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({ data, on
 
   }, [data, onNodeClick]);
 
-  const drag = (simulation: any) => {
-    function dragstarted(event: any, d: any) {
-      if (!event.active) simulation.alphaTarget(0.3).restart();
-      d.fx = d.x;
-      d.fy = d.y;
-    }
-    
-    function dragged(event: any, d: any) {
-      d.fx = event.x;
-      d.fy = event.y;
-    }
-    
-    function dragended(event: any, d: any) {
-      if (!event.active) simulation.alphaTarget(0);
-      d.fx = null;
-      d.fy = null;
-    }
-    
-    return d3.drag()
-      .on("start", dragstarted)
-      .on("drag", dragged)
-      .on("end", dragended);
-  }
+  useEffect(() => {
+    const { node, link, linkLabel } = selectionsRef.current;
+    if (!node || !link || !linkLabel) return;
 
-  return <svg ref={svgRef} className="w-full h-full"></svg>;
+    const query = searchQuery.trim().toLowerCase();
+
+    // Node Type Filtering
+    const typeFilteredNodeIds = new Set(data.nodes.filter(n => selectedNodeTypes.has(n.type)).map(n => n.id));
+
+    let finalVisibleNodeIds: Set<string>;
+
+    if (!query) {
+      finalVisibleNodeIds = typeFilteredNodeIds;
+    } else {
+      // Search Filtering (on top of type filter)
+      const matchingNodeIds = new Set(
+        data.nodes
+          .filter(n => typeFilteredNodeIds.has(n.id) && (n.id.toLowerCase().includes(query) || n.label.toLowerCase().includes(query)))
+          .map(n => n.id)
+      );
+      
+      const searchVisibleNodeIds = new Set(matchingNodeIds);
+      data.links.forEach((l: Link) => {
+        // A link can make a node visible only if both its source and target are of a selected type
+        if (typeFilteredNodeIds.has(l.source) && typeFilteredNodeIds.has(l.target)) {
+            if (matchingNodeIds.has(l.source) || matchingNodeIds.has(l.target)) {
+                searchVisibleNodeIds.add(l.source);
+                searchVisibleNodeIds.add(l.target);
+            }
+        }
+      });
+      finalVisibleNodeIds = searchVisibleNodeIds;
+    }
+
+    node
+      .style('opacity', (d: Node) => finalVisibleNodeIds.has(d.id) ? 1 : 0.1)
+      .style('pointer-events', (d: Node) => finalVisibleNodeIds.has(d.id) ? 'all' : 'none');
+      
+    link
+      .style('opacity', (d: any) => finalVisibleNodeIds.has(d.source.id) && finalVisibleNodeIds.has(d.target.id) ? 0.6 : 0.05);
+
+    linkLabel
+      .style('opacity', (d: any) => finalVisibleNodeIds.has(d.source.id) && finalVisibleNodeIds.has(d.target.id) ? 1 : 0.05);
+      
+  }, [searchQuery, data, selectedNodeTypes]);
+
+  return (
+    <div className="w-full h-full relative">
+       <div className="absolute top-2 left-2 z-10 flex items-center bg-slate-900/70 rounded-lg backdrop-blur-sm border border-slate-700">
+        <div className="pl-3 pr-2 text-slate-400">
+          <SearchIcon className="w-5 h-5"/>
+        </div>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search graph..."
+          className="w-64 bg-transparent py-2 pr-4 text-white placeholder-slate-400 focus:outline-none"
+          aria-label="Search graph nodes"
+        />
+      </div>
+      <svg ref={svgRef} className="w-full h-full"></svg>
+    </div>
+  );
 };

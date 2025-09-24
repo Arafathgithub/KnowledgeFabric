@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import { FileUpload } from './components/FileUpload';
 import { GraphVisualization } from './components/GraphVisualization';
 import { ChatInterface } from './components/ChatInterface';
@@ -20,11 +20,18 @@ const App: React.FC = () => {
   const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
   const [aiProvider, setAiProvider] = useState<'gemini' | 'azure'>('gemini');
+  const [selectedNodeTypes, setSelectedNodeTypes] = useState<Set<string>>(new Set());
 
   const aiServices = {
     gemini: geminiService,
     azure: azureOpenAIService,
   };
+
+  const uniqueNodeTypes = useMemo(() => {
+    if (!graphData) return [];
+    const types = new Set(graphData.nodes.map(node => node.type));
+    return Array.from(types).sort();
+  }, [graphData]);
 
   useEffect(() => {
     try {
@@ -33,6 +40,7 @@ const App: React.FC = () => {
         const savedGraph = JSON.parse(savedGraphJSON);
         if (savedGraph.nodes && savedGraph.links) {
           setGraphData(savedGraph);
+          setSelectedNodeTypes(new Set(savedGraph.nodes.map((n: Node) => n.type)));
           setChatMessages([{
             sender: 'ai',
             text: 'Loaded saved knowledge graph. Ask me anything!'
@@ -56,11 +64,13 @@ const App: React.FC = () => {
     setIsLoadingGraph(true);
     setIsPanelCollapsed(false);
     setSelectedNode(null);
+    setSelectedNodeTypes(new Set());
 
     try {
       const service = aiServices[aiProvider];
       const newGraphData = await service.generateGraphFromText(text);
       setGraphData(newGraphData);
+      setSelectedNodeTypes(new Set(newGraphData.nodes.map(n => n.type)));
       setChatMessages([{
           sender: 'ai',
           text: `Knowledge graph generated with ${aiProvider}. Ask me anything about the document!`
@@ -83,6 +93,7 @@ const App: React.FC = () => {
     setError(null);
     setIsPanelCollapsed(false);
     setSelectedNode(null);
+    setSelectedNodeTypes(new Set());
   }, []);
   
   const handleSendMessage = useCallback(async (message: string) => {
@@ -131,6 +142,18 @@ const App: React.FC = () => {
     setSelectedNode(null);
   }, []);
 
+  const handleNodeTypeChange = useCallback((nodeType: string, isSelected: boolean) => {
+    setSelectedNodeTypes(prev => {
+      const newSet = new Set(prev);
+      if (isSelected) {
+        newSet.add(nodeType);
+      } else {
+        newSet.delete(nodeType);
+      }
+      return newSet;
+    });
+  }, []);
+
   return (
     <div className="min-h-screen bg-slate-900 text-gray-200 font-sans p-4 lg:p-6 flex flex-col">
       <header className="flex items-center justify-between pb-4 border-b border-slate-700">
@@ -162,6 +185,9 @@ const App: React.FC = () => {
             onExportGraph={handleExportGraph}
             aiProvider={aiProvider}
             onAiProviderChange={setAiProvider}
+            uniqueNodeTypes={uniqueNodeTypes}
+            selectedNodeTypes={selectedNodeTypes}
+            onNodeTypeChange={handleNodeTypeChange}
           />
         </aside>
 
@@ -186,7 +212,7 @@ const App: React.FC = () => {
                  <p>Upload a document or load a saved graph.</p>
                </div>
             )}
-            {graphData && <GraphVisualization key={isPanelCollapsed ? 'collapsed' : 'expanded'} data={graphData} onNodeClick={handleNodeClick} />}
+            {graphData && <GraphVisualization key={isPanelCollapsed ? 'collapsed' : 'expanded'} data={graphData} onNodeClick={handleNodeClick} selectedNodeTypes={selectedNodeTypes} />}
           </div>
 
           <div className="lg:col-span-1 bg-slate-800/50 rounded-lg flex flex-col">
