@@ -1,14 +1,28 @@
+
 import React, { useRef, useState, ChangeEvent } from 'react';
-import { UploadIcon, DocumentIcon, LoadingSpinner, TrashIcon } from './icons';
+import { UploadIcon, DocumentIcon, LoadingSpinner, TrashIcon, DownloadIcon, PanelCollapseIcon } from './icons';
 
 interface FileUploadProps {
   onFileUpload: (content: string) => void;
   isLoading: boolean;
   isGraphSaved: boolean;
   onClearStorage: () => void;
+  onTogglePanel: () => void;
+  onExportGraph: () => void;
+  aiProvider: 'gemini' | 'azure';
+  onAiProviderChange: (provider: 'gemini' | 'azure') => void;
 }
 
-export const FileUpload: React.FC<FileUploadProps> = ({ onFileUpload, isLoading, isGraphSaved, onClearStorage }) => {
+export const FileUpload: React.FC<FileUploadProps> = ({ 
+  onFileUpload, 
+  isLoading, 
+  isGraphSaved, 
+  onClearStorage,
+  onTogglePanel,
+  onExportGraph,
+  aiProvider,
+  onAiProviderChange
+}) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState<string>('');
 
@@ -54,9 +68,38 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileUpload, isLoading,
   };
   
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full relative">
+       <button 
+        onClick={onTogglePanel}
+        disabled={isLoading}
+        className="absolute -top-2 -right-2 p-1 text-slate-400 rounded-full hover:bg-slate-700 hover:text-white transition-colors disabled:opacity-50"
+        aria-label="Hide controls panel"
+      >
+        <PanelCollapseIcon className="w-6 h-6" />
+      </button>
       <div>
         <h2 className="text-xl font-semibold text-gray-100 mb-4">Controls</h2>
+        
+        <div className="mb-4">
+            <label className="text-sm font-semibold text-gray-300 mb-2 block">AI Provider</label>
+            <div className="flex bg-slate-700 rounded-lg p-1">
+                <button
+                    className={`flex-1 py-2 text-sm font-semibold rounded-md transition-colors disabled:cursor-not-allowed ${aiProvider === 'gemini' ? 'bg-cyan-600 text-white' : 'text-slate-300 hover:bg-slate-600'}`}
+                    onClick={() => onAiProviderChange('gemini')}
+                    disabled={isLoading}
+                >
+                    Gemini
+                </button>
+                <button
+                    className={`flex-1 py-2 text-sm font-semibold rounded-md transition-colors disabled:cursor-not-allowed ${aiProvider === 'azure' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-600'}`}
+                    onClick={() => onAiProviderChange('azure')}
+                    disabled={isLoading}
+                >
+                    Azure OpenAI
+                </button>
+            </div>
+        </div>
+        
         <div className="flex flex-col space-y-4">
           <input
             type="file"
@@ -108,14 +151,24 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileUpload, isLoading,
         
         <div>
           <h3 className="font-semibold text-gray-300 mb-2">Manage Storage</h3>
-          <button
-            onClick={handleClearClick}
-            disabled={!isGraphSaved || isLoading}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-800/80 text-white rounded-lg font-semibold hover:bg-red-700 transition-all duration-200 disabled:bg-slate-600 disabled:cursor-not-allowed disabled:text-slate-400"
-          >
-            <TrashIcon className="w-5 h-5" />
-            Clear Saved Graph
-          </button>
+          <div className="flex flex-col space-y-2">
+            <button
+              onClick={onExportGraph}
+              disabled={!isGraphSaved || isLoading}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-700 text-white rounded-lg font-semibold hover:bg-indigo-600 transition-all duration-200 disabled:bg-slate-600 disabled:cursor-not-allowed disabled:text-slate-400"
+            >
+              <DownloadIcon className="w-5 h-5" />
+              Export Graph (JSON)
+            </button>
+            <button
+              onClick={handleClearClick}
+              disabled={!isGraphSaved || isLoading}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-red-800/80 text-white rounded-lg font-semibold hover:bg-red-700 transition-all duration-200 disabled:bg-slate-600 disabled:cursor-not-allowed disabled:text-slate-400"
+            >
+              <TrashIcon className="w-5 h-5" />
+              Clear Saved Graph
+            </button>
+          </div>
         </div>
       </div>
     </div>

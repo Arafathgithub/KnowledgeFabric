@@ -3,9 +3,11 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { FileUpload } from './components/FileUpload';
 import { GraphVisualization } from './components/GraphVisualization';
 import { ChatInterface } from './components/ChatInterface';
-import { LoadingSpinner, BrainCircuitIcon } from './components/icons';
-import { generateGraphFromText, queryGraphWithText } from './services/geminiService';
-import { GraphData, ChatMessage } from './types';
+import { NodeDetails } from './components/NodeDetails';
+import { LoadingSpinner, BrainCircuitIcon, PanelExpandIcon } from './components/icons';
+import * as geminiService from './services/geminiService';
+import * as azureOpenAIService from './services/azureOpenAIService';
+import { GraphData, ChatMessage, Node } from './types';
 
 const App: React.FC = () => {
   const [documentText, setDocumentText] = useState<string | null>(null);
@@ -15,6 +17,14 @@ const App: React.FC = () => {
   const [isAnsweringChat, setIsAnsweringChat] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isGraphSaved, setIsGraphSaved] = useState(false);
+  const [isPanelCollapsed, setIsPanelCollapsed] = useState(false);
+  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [aiProvider, setAiProvider] = useState<'gemini' | 'azure'>('gemini');
+
+  const aiServices = {
+    gemini: geminiService,
+    azure: azureOpenAIService,
+  };
 
   useEffect(() => {
     try {
@@ -44,23 +54,25 @@ const App: React.FC = () => {
     setChatMessages([]);
     setError(null);
     setIsLoadingGraph(true);
+    setIsPanelCollapsed(false);
+    setSelectedNode(null);
 
     try {
-      const newGraphData = await generateGraphFromText(text);
+      const service = aiServices[aiProvider];
+      const newGraphData = await service.generateGraphFromText(text);
       setGraphData(newGraphData);
       setChatMessages([{
           sender: 'ai',
-          text: 'Knowledge graph generated. Ask me anything about the document!'
+          text: `Knowledge graph generated with ${aiProvider}. Ask me anything about the document!`
       }]);
       localStorage.setItem('knowledgeGraph', JSON.stringify(newGraphData));
       setIsGraphSaved(true);
-    } catch (err) {
-      console.error(err);
-      setError('Failed to generate knowledge graph. Please try again.');
+    } catch (err: any) {
+      setError(err.message || 'Failed to generate knowledge graph. Please try again.');
     } finally {
       setIsLoadingGraph(false);
     }
-  }, []);
+  }, [aiProvider]);
 
   const handleClearStorage = useCallback(() => {
     localStorage.removeItem('knowledgeGraph');
@@ -69,6 +81,8 @@ const App: React.FC = () => {
     setChatMessages([]);
     setDocumentText(null);
     setError(null);
+    setIsPanelCollapsed(false);
+    setSelectedNode(null);
   }, []);
   
   const handleSendMessage = useCallback(async (message: string) => {
@@ -77,9 +91,11 @@ const App: React.FC = () => {
     const newMessages: ChatMessage[] = [...chatMessages, { sender: 'user', text: message }];
     setChatMessages(newMessages);
     setIsAnsweringChat(true);
+    setSelectedNode(null);
 
     try {
-      const response = await queryGraphWithText(graphData, message);
+      const service = aiServices[aiProvider];
+      const response = await service.queryGraphWithText(graphData, message);
       setChatMessages([...newMessages, { sender: 'ai', text: response }]);
     } catch (err) {
       console.error(err);
@@ -87,7 +103,33 @@ const App: React.FC = () => {
     } finally {
       setIsAnsweringChat(false);
     }
-  }, [graphData, chatMessages]);
+  }, [graphData, chatMessages, aiProvider]);
+
+  const handleTogglePanel = () => {
+      setIsPanelCollapsed(prev => !prev);
+  }
+  
+  const handleExportGraph = useCallback(() => {
+    if (!graphData) return;
+
+    const blob = new Blob([JSON.stringify(graphData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'knowledge-graph.json';
+    document.body.appendChild(link); // Required for Firefox
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, [graphData]);
+
+  const handleNodeClick = useCallback((node: Node) => {
+    setSelectedNode(node);
+  }, []);
+
+  const handleCloseNodeDetails = useCallback(() => {
+    setSelectedNode(null);
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-900 text-gray-200 font-sans p-4 lg:p-6 flex flex-col">
@@ -100,17 +142,30 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      <main className="flex-grow grid grid-cols-1 lg:grid-cols-12 gap-6 mt-6">
-        <aside className="lg:col-span-3 bg-slate-800/50 rounded-lg p-6 flex flex-col h-full">
+      <main className="flex-grow grid grid-cols-1 lg:grid-cols-12 gap-6 mt-6 relative">
+        {isPanelCollapsed && (
+            <button
+                onClick={handleTogglePanel}
+                className="absolute top-4 left-0 z-20 bg-slate-800/80 p-2 rounded-r-lg hover:bg-slate-700 transition-colors"
+                aria-label="Show controls panel"
+            >
+                <PanelExpandIcon className="w-5 h-5 text-gray-200" />
+            </button>
+        )}
+        <aside className={`lg:col-span-3 bg-slate-800/50 rounded-lg p-6 flex-col h-full ${isPanelCollapsed ? 'hidden' : 'flex'}`}>
           <FileUpload 
             onFileUpload={handleFileUpload} 
             isLoading={isLoadingGraph} 
             isGraphSaved={isGraphSaved}
             onClearStorage={handleClearStorage}
+            onTogglePanel={handleTogglePanel}
+            onExportGraph={handleExportGraph}
+            aiProvider={aiProvider}
+            onAiProviderChange={setAiProvider}
           />
         </aside>
 
-        <div className="lg:col-span-9 grid grid-rows-2 lg:grid-rows-1 lg:grid-cols-3 gap-6">
+        <div className={`${isPanelCollapsed ? 'lg:col-span-12' : 'lg:col-span-9'} grid grid-rows-2 lg:grid-rows-1 lg:grid-cols-3 gap-6 relative`}>
           <div className="lg:col-span-2 bg-slate-800/50 rounded-lg p-4 relative min-h-[400px] lg:min-h-0 flex items-center justify-center">
             {isLoadingGraph && (
               <div className="absolute inset-0 bg-slate-900/50 flex flex-col items-center justify-center z-10 rounded-lg">
@@ -119,8 +174,9 @@ const App: React.FC = () => {
               </div>
             )}
             {error && !isLoadingGraph && (
-              <div className="text-center text-red-400">
-                <p>Error: {error}</p>
+              <div className="text-center text-red-400 p-4">
+                <p className="font-semibold">An Error Occurred</p>
+                <p className="text-sm mt-1">{error}</p>
               </div>
             )}
             {!graphData && !isLoadingGraph && !error && (
@@ -130,7 +186,7 @@ const App: React.FC = () => {
                  <p>Upload a document or load a saved graph.</p>
                </div>
             )}
-            {graphData && <GraphVisualization data={graphData} />}
+            {graphData && <GraphVisualization key={isPanelCollapsed ? 'collapsed' : 'expanded'} data={graphData} onNodeClick={handleNodeClick} />}
           </div>
 
           <div className="lg:col-span-1 bg-slate-800/50 rounded-lg flex flex-col">
@@ -141,6 +197,14 @@ const App: React.FC = () => {
               isReady={!!graphData}
             />
           </div>
+
+          {selectedNode && graphData && (
+            <NodeDetails 
+              node={selectedNode} 
+              graphData={graphData} 
+              onClose={handleCloseNodeDetails} 
+            />
+          )}
         </div>
       </main>
     </div>

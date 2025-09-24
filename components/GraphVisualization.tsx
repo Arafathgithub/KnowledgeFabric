@@ -1,14 +1,15 @@
 
 import React, { useEffect, useRef } from 'react';
-import { GraphData } from '../types';
+import { GraphData, Node } from '../types';
 
 declare const d3: any;
 
 interface GraphVisualizationProps {
   data: GraphData;
+  onNodeClick: (node: Node) => void;
 }
 
-export const GraphVisualization: React.FC<GraphVisualizationProps> = ({ data }) => {
+export const GraphVisualization: React.FC<GraphVisualizationProps> = ({ data, onNodeClick }) => {
   const svgRef = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
@@ -58,7 +59,13 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({ data }) 
       .selectAll("g")
       .data(nodes)
       .join("g")
+      .style("cursor", "pointer")
       .call(drag(simulation) as any);
+      
+    node.on("click", (event: any, d: any) => {
+        onNodeClick(d);
+        event.stopPropagation();
+    });
 
     node.append("circle")
       .attr("r", 10)
@@ -110,7 +117,7 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({ data }) 
 
     svg.call(zoom);
 
-  }, [data]);
+  }, [data, onNodeClick]);
 
   const drag = (simulation: any) => {
     function dragstarted(event: any, d: any) {

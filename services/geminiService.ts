@@ -1,6 +1,6 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { GraphData } from '../types';
+import { GraphData, Node, Link } from '../types';
 
 if (!process.env.API_KEY) {
     throw new Error("API_KEY environment variable not set");
@@ -82,13 +82,39 @@ ${text}
         const parsedJson = JSON.parse(jsonText);
 
         // Basic validation
-        if (!parsedJson.nodes || !parsedJson.links) {
-            throw new Error("Invalid graph structure received from API");
+        if (!parsedJson.nodes || !Array.isArray(parsedJson.nodes) || !parsedJson.links || !Array.isArray(parsedJson.links)) {
+            throw new Error("Invalid graph structure from API: 'nodes' or 'links' is not an array.");
         }
-        return parsedJson as GraphData;
+        
+        // Data integrity check: Ensure all links refer to existing nodes.
+        const nodeIds = new Set(parsedJson.nodes.map((node: Node) => node.id));
+        
+        const validLinks = parsedJson.links.filter((link: Link) => {
+            const sourceExists = nodeIds.has(link.source);
+            const targetExists = nodeIds.has(link.target);
+            if (!sourceExists) {
+                console.warn(`Filtering link: source node '${link.source}' not found. Link: ${JSON.stringify(link)}`);
+            }
+            if (!targetExists) {
+                console.warn(`Filtering link: target node '${link.target}' not found. Link: ${JSON.stringify(link)}`);
+            }
+            return sourceExists && targetExists;
+        });
+
+        if (validLinks.length < parsedJson.links.length) {
+            console.log(`Filtered ${parsedJson.links.length - validLinks.length} invalid link(s) due to missing nodes.`);
+        }
+        
+        return {
+            nodes: parsedJson.nodes,
+            links: validLinks,
+        };
 
     } catch (error) {
         console.error("Error generating graph from text:", error);
+        if (error instanceof SyntaxError) {
+             throw new Error("Failed to parse the AI model's JSON response.");
+        }
         throw new Error("Failed to communicate with the AI model.");
     }
 };
