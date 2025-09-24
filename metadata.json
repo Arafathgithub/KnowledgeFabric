@@ -1,0 +1,5 @@
+{
+  "name": "Knowledge Graph Visualizer",
+  "description": "An application to construct and visualize a knowledge graph from an uploaded document, and interact with it through a chat interface.",
+  "requestFramePermissions": []
+}
