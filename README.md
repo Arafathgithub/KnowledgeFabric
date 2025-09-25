@@ -1,17 +1,31 @@
 # Knowledge Graph Visualizer
 
-This application allows users to upload a text document, from which an AI-powered service generates a knowledge graph. The graph's entities and relationships are then visualized interactively using D3.js. Users can also query the generated graph through a chat interface to gain insights from the document.
+This application allows users to upload a text document, from which an AI-powered service generates a knowledge graph. The graph's entities and relationships are then visualized interactively using D3.js. Users can explore the graph with advanced analysis tools and query it through a chat interface to gain deep insights from the document.
 
 ### Features
-*   **Document Upload:** Upload `.txt` files to be processed.
-*   **AI-Powered Graph Generation:** Utilizes Google Gemini to extract entities and relationships from text.
-*   **Interactive Visualization:** Renders the knowledge graph using D3.js, with zoom, pan, and drag-and-drop functionalities.
-*   **Node Inspection:** Click on any node to view its properties and connections in a details panel.
-*   **Chat Interface:** Ask questions about the document's content in natural language.
-*   **Persistent Storage:** Automatically saves the last generated graph to the browser's local storage.
-*   **Export Functionality:** Download the generated graph data as a JSON file.
-*   **Provider Selection:** Switch between AI providers (Note: Azure OpenAI is a placeholder).
-*   **Responsive Design:** Works on various screen sizes, from desktops to mobile devices.
+
+*   **Document Processing & Graph Generation**
+    *   **Upload & Sample Data:** Upload `.txt` files or load a sample document to get started quickly.
+    *   **AI-Powered Generation:** Utilizes Google Gemini to extract entities (nodes) and relationships (links) from text, automatically constructing a knowledge graph.
+    *   **Provider Selection:** Switch between AI providers (Note: Azure OpenAI is currently a placeholder).
+
+*   **Interactive Graph Visualization**
+    *   **Dynamic Rendering:** Renders the knowledge graph using D3.js, with smooth zoom, pan, and drag-and-drop functionalities.
+    *   **Node Inspection:** Click on any node to view its properties and all its direct connections in a detailed side panel.
+    *   **Node Filtering:** Dynamically filter the graph by node type using checkboxes to focus on specific entity categories.
+    *   **Graph Search:** Instantly search for nodes by name to quickly locate specific entities within complex graphs.
+
+*   **Advanced Analysis & Insights**
+    *   **Centrality Analysis:** Identify the most influential nodes by highlighting a user-defined percentage of the most connected entities ("Importance").
+    *   **Community Detection:** Automatically detect and color-code clusters or communities of closely related nodes.
+    *   **Node Comparison:** A dedicated mode to select any two nodes and analyze their relationship, showing the shortest path and common neighbors.
+    *   **Conversational Q&A:** Ask questions about the document's content in natural language via an integrated chat interface that queries the graph.
+
+*   **Utilities & Data Management**
+    *   **Persistent Storage:** Automatically saves the last generated graph to the browser's local storage for easy access in future sessions.
+    *   **Export Functionality:** Download the complete graph data as a structured JSON file.
+    *   **Collapsible Controls:** A clean UI with a side panel for controls that can be collapsed to maximize visualization space.
+    *   **Responsive Design:** Optimized for various screen sizes, from large desktops to smaller devices.
 
 ### Tech Stack
 *   **Frontend:** [React](https://react.dev/), [TypeScript](https://www.typescriptlang.org/)
