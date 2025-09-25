@@ -1,5 +1,7 @@
 import React, { useRef, useState, ChangeEvent } from 'react';
-import { UploadIcon, DocumentIcon, LoadingSpinner, TrashIcon, DownloadIcon, PanelCollapseIcon } from './icons';
+import { UploadIcon, DocumentIcon, LoadingSpinner, TrashIcon, DownloadIcon, PanelCollapseIcon, AnalyticsIcon, UsersIcon, GitCompareIcon } from './icons';
+import { AnalysisType } from '../App';
+import { Node } from '../types';
 
 interface FileUploadProps {
   onFileUpload: (content: string) => void;
@@ -13,6 +15,13 @@ interface FileUploadProps {
   uniqueNodeTypes: string[];
   selectedNodeTypes: Set<string>;
   onNodeTypeChange: (nodeType: string, isSelected: boolean) => void;
+  analysisType: AnalysisType;
+  onAnalysisTypeChange: (type: AnalysisType) => void;
+  centralityTopN: number;
+  onCentralityTopNChange: (value: number) => void;
+  isCompareMode: boolean;
+  onToggleCompareMode: () => void;
+  comparisonNode1: Node | null;
 }
 
 export const FileUpload: React.FC<FileUploadProps> = ({ 
@@ -26,7 +35,14 @@ export const FileUpload: React.FC<FileUploadProps> = ({
   onAiProviderChange,
   uniqueNodeTypes,
   selectedNodeTypes,
-  onNodeTypeChange
+  onNodeTypeChange,
+  analysisType,
+  onAnalysisTypeChange,
+  centralityTopN,
+  onCentralityTopNChange,
+  isCompareMode,
+  onToggleCompareMode,
+  comparisonNode1
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [fileName, setFileName] = useState<string>('');
@@ -68,7 +84,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       onFileUpload(text);
     } catch (error) {
       console.error("Failed to load sample document:", error);
-      // You could add some user-facing error state here
     }
   };
   
@@ -82,7 +97,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       >
         <PanelCollapseIcon className="w-6 h-6" />
       </button>
-      <div className="flex-grow overflow-y-auto pr-2">
+      <div className="flex-grow overflow-y-auto pr-2 custom-scrollbar">
         <h2 className="text-xl font-semibold text-gray-100 mb-4">Controls</h2>
         
         <div className="mb-6">
@@ -104,29 +119,8 @@ export const FileUpload: React.FC<FileUploadProps> = ({
                 </button>
             </div>
         </div>
-
-        {uniqueNodeTypes.length > 0 && (
-          <div className="mb-6">
-            <h3 className="text-sm font-semibold text-gray-300 mb-3">Node Type Filters</h3>
-            <div className="max-h-32 overflow-y-auto custom-scrollbar border border-slate-700 rounded-lg p-3 bg-slate-900/30">
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                {uniqueNodeTypes.map(type => (
-                  <label key={type} className="flex items-center space-x-2 text-sm text-gray-200 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedNodeTypes.has(type)}
-                      onChange={(e) => onNodeTypeChange(type, e.target.checked)}
-                      className="h-4 w-4 rounded bg-slate-700 border-slate-500 text-cyan-500 focus:ring-cyan-600"
-                    />
-                    <span className="truncate" title={type}>{type}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
         
-        <div className="flex flex-col space-y-4">
+        <div className="flex flex-col space-y-4 mb-6">
           <input
             type="file"
             ref={fileInputRef}
@@ -140,15 +134,9 @@ export const FileUpload: React.FC<FileUploadProps> = ({
             className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-cyan-600 text-white rounded-lg font-semibold hover:bg-cyan-500 transition-all duration-200 disabled:bg-slate-600 disabled:cursor-not-allowed"
           >
             {isLoading ? (
-              <>
-                <LoadingSpinner className="w-5 h-5"/>
-                Processing...
-              </>
+              <><LoadingSpinner className="w-5 h-5"/>Processing...</>
             ) : (
-              <>
-                <UploadIcon className="w-5 h-5"/>
-                Upload Document
-              </>
+              <><UploadIcon className="w-5 h-5"/>Upload Document</>
             )}
           </button>
           {fileName && !isLoading && (
@@ -157,14 +145,70 @@ export const FileUpload: React.FC<FileUploadProps> = ({
               </p>
           )}
         </div>
+
+        {isGraphSaved && (
+          <>
+            <div className="space-y-6 border-t border-slate-700 pt-6">
+              {uniqueNodeTypes.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-300 mb-3">Node Type Filters</h3>
+                  <div className="max-h-32 overflow-y-auto custom-scrollbar border border-slate-700 rounded-lg p-3 bg-slate-900/30">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                      {uniqueNodeTypes.map(type => (
+                        <label key={type} className="flex items-center space-x-2 text-sm text-gray-200 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedNodeTypes.has(type)}
+                            onChange={(e) => onNodeTypeChange(type, e.target.checked)}
+                            className="h-4 w-4 rounded bg-slate-700 border-slate-500 text-cyan-500 focus:ring-cyan-600"
+                          />
+                          <span className="truncate" title={type}>{type}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <h3 className="text-sm font-semibold text-gray-300 mb-3">Graph Analysis</h3>
+                <div className="flex bg-slate-700 rounded-lg p-1 text-sm text-center font-semibold">
+                  {([['none', 'None'], ['centrality', 'Importance'], ['clusters', 'Clusters']] as const).map(([type, label]) => (
+                    <button key={type} onClick={() => onAnalysisTypeChange(type)} className={`flex-1 py-1.5 rounded-md transition-colors ${analysisType === type ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:bg-slate-600'}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {analysisType === 'centrality' && (
+                   <div className="mt-4">
+                      <label htmlFor="centrality-slider" className="text-xs text-slate-400 mb-2 block">Highlight top {centralityTopN}% most important nodes</label>
+                      <input id="centrality-slider" type="range" min="1" max="50" value={centralityTopN} onChange={e => onCentralityTopNChange(parseInt(e.target.value, 10))} className="w-full h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-cyan-500" />
+                   </div>
+                )}
+              </div>
+
+              <div>
+                <h3 className="text-sm font-semibold text-gray-300 mb-3">Interactive Tools</h3>
+                 <button
+                  onClick={onToggleCompareMode}
+                  disabled={isLoading}
+                  className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-semibold transition-all duration-200 disabled:bg-slate-600 disabled:cursor-not-allowed ${isCompareMode ? 'bg-rose-600 text-white hover:bg-rose-500' : 'bg-slate-700 text-gray-200 hover:bg-slate-600'}`}
+                >
+                  <GitCompareIcon className="w-5 h-5" />
+                  {isCompareMode ? (comparisonNode1 ? 'Select 2nd Node...' : 'Select 1st Node...') : 'Compare Nodes'}
+                </button>
+                {isCompareMode && (
+                    <button onClick={onToggleCompareMode} className="text-xs text-slate-400 hover:text-white text-center w-full mt-2">Cancel Comparison</button>
+                )}
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
-      <div className="mt-6 pt-6 border-t border-slate-700">
+      <div className="mt-auto pt-6 border-t border-slate-700 flex-shrink-0">
         <div className="mb-6">
           <h3 className="font-semibold text-gray-300 mb-2">Don't have a file?</h3>
-          <p className="text-sm text-slate-400 mb-4">
-            Load our sample document to see how it works.
-          </p>
           <button
             onClick={handleLoadSample}
             disabled={isLoading}
@@ -176,7 +220,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         </div>
         
         <div>
-          <h3 className="font-semibold text-gray-300 mb-2">Manage Storage</h3>
+          <h3 className="font-semibold text-gray-300 mb-2">Manage Graph</h3>
           <div className="flex flex-col space-y-2">
             <button
               onClick={onExportGraph}

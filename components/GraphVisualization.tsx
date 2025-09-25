@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { GraphData, Node, Link } from '../types';
 import { SearchIcon } from './icons';
+import { AnalysisType } from '../App';
 
 declare const d3: any;
 
@@ -8,12 +9,35 @@ interface GraphVisualizationProps {
   data: GraphData;
   onNodeClick: (node: Node) => void;
   selectedNodeTypes: Set<string>;
+  analysisType: AnalysisType;
+  analysisResults: {
+    centrality?: Map<string, number>;
+    clusters?: Map<string, number>;
+  };
+  centralityTopN: number;
+  isCompareMode: boolean;
+  comparisonNodes: { node1: Node | null, node2: Node | null };
+  comparisonResults: {
+    path: string[] | null;
+    pathLinks: {source: string, target: string}[] | null;
+    commonNeighbors: string[] | null;
+  } | null;
 }
 
-export const GraphVisualization: React.FC<GraphVisualizationProps> = ({ data, onNodeClick, selectedNodeTypes }) => {
+export const GraphVisualization: React.FC<GraphVisualizationProps> = ({ 
+    data, 
+    onNodeClick, 
+    selectedNodeTypes,
+    analysisType,
+    analysisResults,
+    centralityTopN,
+    isCompareMode,
+    comparisonNodes,
+    comparisonResults
+}) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const selectionsRef = useRef<{ node?: any; link?: any; linkLabel?: any }>({});
+  const selectionsRef = useRef<{ node?: any; link?: any; linkLabel?: any; g?: any }>({});
 
   const drag = (simulation: any) => {
     function dragstarted(event: any, d: any) {
@@ -38,7 +62,15 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({ data, on
       .on("drag", dragged)
       .on("end", dragended);
   }
+  
+  const importantNodeIds = useMemo(() => {
+    if (analysisType !== 'centrality' || !analysisResults.centrality) return new Set();
+    const sortedNodes = [...analysisResults.centrality.entries()].sort((a, b) => b[1] - a[1]);
+    const count = Math.ceil(sortedNodes.length * (centralityTopN / 100));
+    return new Set(sortedNodes.slice(0, count).map(entry => entry[0]));
+  }, [analysisType, analysisResults.centrality, centralityTopN]);
 
+  // Initial setup effect
   useEffect(() => {
     if (!data || !svgRef.current) return;
 
@@ -50,11 +82,12 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({ data, on
     svg.attr('width', width).attr('height', height);
     svg.selectAll('*').remove();
 
+    const g = svg.append("g");
+    selectionsRef.current.g = g;
+
     const nodes = data.nodes.map(d => ({...d}));
     const links = data.links.map(d => ({...d}));
     
-    const color = d3.scaleOrdinal(d3.schemeCategory10);
-
     const simulation = d3.forceSimulation(nodes)
       .force("link", d3.forceLink(links).id((d: any) => d.id).distance(120))
       .force("charge", d3.forceManyBody().strength(-300))
@@ -62,138 +95,154 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({ data, on
       .force("x", d3.forceX(width / 2).strength(0.05))
       .force("y", d3.forceY(height / 2).strength(0.05));
 
-    const g = svg.append("g");
+    const link = g.append("g").selectAll("line");
+    const linkLabel = g.append("g").selectAll("text");
+    const node = g.append("g").selectAll("g");
 
-    const link = g.append("g")
-      .attr("stroke", "#999")
-      .attr("stroke-opacity", 0.6)
-      .selectAll("line")
-      .data(links)
-      .join("line")
-      .attr("stroke-width", 1.5);
-
-    const linkLabel = g.append("g")
-      .selectAll("text")
-      .data(links)
-      .join("text")
-      .text((d: any) => d.label)
-      .attr("fill", "#aaa")
-      .attr("font-size", 10)
-      .attr("text-anchor", "middle");
-
-    const node = g.append("g")
-      .selectAll("g")
-      .data(nodes)
-      .join("g")
-      .style("cursor", "pointer")
-      .call(drag(simulation) as any);
+    selectionsRef.current = { node, link, linkLabel, g };
+    
+    // Re-bind data and update visualization
+    selectionsRef.current.link = link.data(links).join("line")
+      .attr("stroke", "#999").attr("stroke-opacity", 0.6).attr("stroke-width", 1.5);
       
-    node.on("click", (event: any, d: any) => {
+    selectionsRef.current.linkLabel = linkLabel.data(links).join("text")
+      .text((d: any) => d.label).attr("fill", "#aaa").attr("font-size", 10).attr("text-anchor", "middle");
+
+    selectionsRef.current.node = node.data(nodes, (d:any) => d.id).join("g")
+      .style("cursor", "pointer").call(drag(simulation) as any);
+      
+    selectionsRef.current.node.on("click", (event: any, d: any) => {
         onNodeClick(d);
         event.stopPropagation();
     });
 
-    node.append("circle")
-      .attr("r", 10)
-      .attr("fill", (d: any) => color(d.type))
-      .attr("stroke", "#fff")
-      .attr("stroke-width", 1.5);
+    selectionsRef.current.node.append("circle")
+      .attr("r", 10).attr("stroke", "#fff").attr("stroke-width", 1.5);
 
-    node.append("text")
-      .text((d: any) => d.label)
-      .attr("x", 15)
-      .attr("y", 5)
-      .attr("fill", "#eee")
-      .attr("font-size", 12)
-      .attr("paint-order", "stroke")
-      .attr("stroke", "#1e293b")
-      .attr("stroke-width", 2);
+    selectionsRef.current.node.append("text")
+      .text((d: any) => d.label).attr("x", 15).attr("y", 5).attr("fill", "#eee")
+      .attr("font-size", 12).attr("paint-order", "stroke").attr("stroke", "#1e293b").attr("stroke-width", 3);
 
-    node.append("title")
-        .text((d: any) => `${d.label} (${d.type})`);
+    selectionsRef.current.node.append("title").text((d: any) => `${d.label} (${d.type})`);
     
-    node.on("mouseover", (event: any, d: any) => {
-        link
-            .attr("stroke", (l: any) => (l.source.id === d.id || l.target.id === d.id) ? "#06b6d4" : "#999")
-            .attr("stroke-opacity", (l: any) => (l.source.id === d.id || l.target.id === d.id) ? 1.0 : 0.6);
-        linkLabel
-            .attr("fill", (l: any) => (l.source.id === d.id || l.target.id === d.id) ? "#06b6d4" : "#aaa");
-    }).on("mouseout", () => {
-        link.attr("stroke", "#999").attr("stroke-opacity", 0.6);
-        linkLabel.attr("fill", "#aaa");
-    });
-    
-    selectionsRef.current = { node, link, linkLabel };
-
     simulation.on("tick", () => {
-      link
-        .attr("x1", (d: any) => d.source.x)
-        .attr("y1", (d: any) => d.source.y)
-        .attr("x2", (d: any) => d.target.x)
-        .attr("y2", (d: any) => d.target.y);
-
-      node.attr("transform", (d: any) => `translate(${d.x},${d.y})`);
-
-      linkLabel
-        .attr("x", (d: any) => (d.source.x + d.target.x) / 2)
-        .attr("y", (d: any) => (d.source.y + d.target.y) / 2);
+        selectionsRef.current.link
+            .attr("x1", (d: any) => d.source.x).attr("y1", (d: any) => d.source.y)
+            .attr("x2", (d: any) => d.target.x).attr("y2", (d: any) => d.target.y);
+        selectionsRef.current.node.attr("transform", (d: any) => `translate(${d.x},${d.y})`);
+        selectionsRef.current.linkLabel
+            .attr("x", (d: any) => (d.source.x + d.target.x) / 2)
+            .attr("y", (d: any) => (d.source.y + d.target.y) / 2);
     });
     
-    const zoom = d3.zoom().on("zoom", (event: any) => {
-        g.attr("transform", event.transform);
-    });
-
-    svg.call(zoom);
+    const zoom = d3.zoom().on("zoom", (event: any) => g.attr("transform", event.transform));
+    svg.call(zoom as any);
 
   }, [data, onNodeClick]);
 
+  // Update effect for filtering, analysis, and comparison
   useEffect(() => {
     const { node, link, linkLabel } = selectionsRef.current;
     if (!node || !link || !linkLabel) return;
 
+    // --- BASE FILTERING ---
     const query = searchQuery.trim().toLowerCase();
-
-    // Node Type Filtering
-    // FIX: Explicitly type Set to avoid TypeScript inferring Set<unknown>
     const typeFilteredNodeIds = new Set<string>(data.nodes.filter(n => selectedNodeTypes.has(n.type)).map(n => n.id));
-
-    let finalVisibleNodeIds: Set<string>;
+    let searchFilteredNodeIds: Set<string>;
 
     if (!query) {
-      finalVisibleNodeIds = typeFilteredNodeIds;
+      searchFilteredNodeIds = typeFilteredNodeIds;
     } else {
-      // Search Filtering (on top of type filter)
-      // FIX: Explicitly type Set to avoid TypeScript inferring Set<unknown>
       const matchingNodeIds = new Set<string>(
         data.nodes
           .filter(n => typeFilteredNodeIds.has(n.id) && (n.id.toLowerCase().includes(query) || n.label.toLowerCase().includes(query)))
           .map(n => n.id)
       );
-      
-      const searchVisibleNodeIds = new Set<string>(matchingNodeIds);
+      const visibleFromSearch = new Set<string>(matchingNodeIds);
       data.links.forEach((l: Link) => {
-        // A link can make a node visible only if both its source and target are of a selected type
+// FIX: Corrected typo from `typeFilteredNodeTypes` to `typeFilteredNodeIds`
         if (typeFilteredNodeIds.has(l.source) && typeFilteredNodeIds.has(l.target)) {
             if (matchingNodeIds.has(l.source) || matchingNodeIds.has(l.target)) {
-                searchVisibleNodeIds.add(l.source);
-                searchVisibleNodeIds.add(l.target);
+                visibleFromSearch.add(l.source);
+                visibleFromSearch.add(l.target);
             }
         }
       });
-      finalVisibleNodeIds = searchVisibleNodeIds;
+      searchFilteredNodeIds = visibleFromSearch;
     }
 
+    // --- VISUAL STYLES ---
+    const color = d3.scaleOrdinal(d3.schemeCategory10);
+    const clusterColor = d3.scaleOrdinal(d3.schemePastel1);
+    
+    const getNodeFill = (d: Node) => {
+        if (analysisType === 'clusters' && analysisResults.clusters) {
+            return clusterColor(analysisResults.clusters.get(d.id));
+        }
+        return color(d.type);
+    };
+
+    const getNodeRadius = (d: Node) => {
+        if (isCompareMode) return 10;
+        if (analysisType === 'centrality' && importantNodeIds.has(d.id)) {
+            return 15;
+        }
+        return 10;
+    }
+    
+    // --- COMPARISON MODE LOGIC ---
+    let comparisonHighlightIds = new Set<string>();
+    let comparisonPathNodeIds = new Set<string>();
+    let comparisonPathLinkIds = new Set<string>();
+
+    if (isCompareMode && comparisonResults) {
+        if (comparisonNodes.node1) comparisonHighlightIds.add(comparisonNodes.node1.id);
+        if (comparisonNodes.node2) comparisonHighlightIds.add(comparisonNodes.node2.id);
+        if (comparisonResults.commonNeighbors) {
+            comparisonResults.commonNeighbors.forEach(id => comparisonHighlightIds.add(id));
+        }
+        if (comparisonResults.path) {
+            comparisonResults.path.forEach(id => comparisonPathNodeIds.add(id));
+        }
+        if (comparisonResults.pathLinks) {
+            comparisonResults.pathLinks.forEach(l => {
+                comparisonPathLinkIds.add(`${l.source}-${l.target}`);
+                comparisonPathLinkIds.add(`${l.target}-${l.source}`);
+            });
+        }
+    }
+
+    // --- APPLY UPDATES ---
+    node.selectAll('circle')
+        .transition().duration(300)
+        .attr('r', getNodeRadius)
+        .attr('fill', getNodeFill)
+        .attr('stroke', (d: Node) => {
+            if (isCompareMode && comparisonHighlightIds.has(d.id)) return '#f43f5e'; // rose-500
+            if (isCompareMode && comparisonPathNodeIds.has(d.id)) return '#38bdf8'; // sky-400
+            return '#fff';
+        })
+        .attr('stroke-width', (d: Node) => isCompareMode && (comparisonHighlightIds.has(d.id) || comparisonPathNodeIds.has(d.id)) ? 3 : 1.5);
+    
     node
-      .style('opacity', (d: Node) => finalVisibleNodeIds.has(d.id) ? 1 : 0.1)
-      .style('pointer-events', (d: Node) => finalVisibleNodeIds.has(d.id) ? 'all' : 'none');
+      .style('opacity', (d: Node) => {
+        const isVisible = searchFilteredNodeIds.has(d.id);
+        if (!isVisible) return 0.1;
+        if (isCompareMode && comparisonResults && !comparisonHighlightIds.has(d.id) && !comparisonPathNodeIds.has(d.id)) return 0.2;
+        return 1;
+      })
+      .style('pointer-events', (d: Node) => searchFilteredNodeIds.has(d.id) ? 'all' : 'none');
       
     link
-      .style('opacity', (d: any) => finalVisibleNodeIds.has(d.source.id) && finalVisibleNodeIds.has(d.target.id) ? 0.6 : 0.05);
+      .style('opacity', (d: any) => (searchFilteredNodeIds.has(d.source.id) && searchFilteredNodeIds.has(d.target.id)) ? 0.6 : 0.05)
+      .transition().duration(300)
+      .attr('stroke', (d: any) => isCompareMode && comparisonPathLinkIds.has(`${d.source.id}-${d.target.id}`) ? '#38bdf8' : '#999')
+      .attr('stroke-width', (d: any) => isCompareMode && comparisonPathLinkIds.has(`${d.source.id}-${d.target.id}`) ? 3 : 1.5);
 
     linkLabel
-      .style('opacity', (d: any) => finalVisibleNodeIds.has(d.source.id) && finalVisibleNodeIds.has(d.target.id) ? 1 : 0.05);
-      
-  }, [searchQuery, data, selectedNodeTypes]);
+      .style('opacity', (d: any) => (searchFilteredNodeIds.has(d.source.id) && searchFilteredNodeIds.has(d.target.id)) ? 1 : 0.05);
+
+  }, [searchQuery, data, selectedNodeTypes, analysisType, analysisResults, importantNodeIds, isCompareMode, comparisonNodes, comparisonResults]);
 
   return (
     <div className="w-full h-full relative">

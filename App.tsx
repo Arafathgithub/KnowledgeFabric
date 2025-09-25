@@ -4,10 +4,14 @@ import { FileUpload } from './components/FileUpload';
 import { GraphVisualization } from './components/GraphVisualization';
 import { ChatInterface } from './components/ChatInterface';
 import { NodeDetails } from './components/NodeDetails';
+import { NodeComparisonDetails } from './components/NodeComparisonDetails';
 import { LoadingSpinner, BrainCircuitIcon, PanelExpandIcon } from './components/icons';
 import * as geminiService from './services/geminiService';
 import * as azureOpenAIService from './services/azureOpenAIService';
+import * as graphAlgorithms from './services/graphAlgorithms';
 import { GraphData, ChatMessage, Node } from './types';
+
+export type AnalysisType = 'none' | 'centrality' | 'clusters';
 
 const App: React.FC = () => {
   const [documentText, setDocumentText] = useState<string | null>(null);
@@ -22,6 +26,12 @@ const App: React.FC = () => {
   const [aiProvider, setAiProvider] = useState<'gemini' | 'azure'>('gemini');
   const [selectedNodeTypes, setSelectedNodeTypes] = useState<Set<string>>(new Set());
 
+  // New state for graph analysis
+  const [analysisType, setAnalysisType] = useState<AnalysisType>('none');
+  const [centralityTopN, setCentralityTopN] = useState(10); // Top 10%
+  const [isCompareMode, setIsCompareMode] = useState(false);
+  const [comparisonNodes, setComparisonNodes] = useState<{ node1: Node | null, node2: Node | null }>({ node1: null, node2: null });
+
   const aiServices = {
     gemini: geminiService,
     azure: azureOpenAIService,
@@ -32,6 +42,26 @@ const App: React.FC = () => {
     const types = new Set(graphData.nodes.map(node => node.type));
     return Array.from(types).sort();
   }, [graphData]);
+  
+  const analysisResults = useMemo(() => {
+    if (!graphData) return {};
+    return {
+      centrality: graphAlgorithms.calculateDegreeCentrality(graphData.nodes, graphData.links),
+      clusters: graphAlgorithms.detectCommunities(graphData.nodes, graphData.links),
+    };
+  }, [graphData]);
+
+  const comparisonResults = useMemo(() => {
+    if (!graphData || !comparisonNodes.node1 || !comparisonNodes.node2) return null;
+    const { path, links } = graphAlgorithms.findShortestPath(comparisonNodes.node1.id, comparisonNodes.node2.id, graphData.nodes, graphData.links);
+    const commonNeighbors = graphAlgorithms.findCommonNeighbors(comparisonNodes.node1.id, comparisonNodes.node2.id, graphData.nodes, graphData.links);
+    return {
+      path,
+      pathLinks: links,
+      commonNeighbors
+    }
+  }, [graphData, comparisonNodes]);
+
 
   useEffect(() => {
     try {
@@ -56,15 +86,23 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const handleFileUpload = useCallback(async (text: string) => {
-    setDocumentText(text);
+  const resetState = () => {
     setGraphData(null);
     setChatMessages([]);
+    setDocumentText(null);
     setError(null);
-    setIsLoadingGraph(true);
     setIsPanelCollapsed(false);
     setSelectedNode(null);
     setSelectedNodeTypes(new Set());
+    setAnalysisType('none');
+    setIsCompareMode(false);
+    setComparisonNodes({ node1: null, node2: null });
+  };
+
+  const handleFileUpload = useCallback(async (text: string) => {
+    resetState();
+    setDocumentText(text);
+    setIsLoadingGraph(true);
 
     try {
       const service = aiServices[aiProvider];
@@ -87,13 +125,7 @@ const App: React.FC = () => {
   const handleClearStorage = useCallback(() => {
     localStorage.removeItem('knowledgeGraph');
     setIsGraphSaved(false);
-    setGraphData(null);
-    setChatMessages([]);
-    setDocumentText(null);
-    setError(null);
-    setIsPanelCollapsed(false);
-    setSelectedNode(null);
-    setSelectedNodeTypes(new Set());
+    resetState();
   }, []);
   
   const handleSendMessage = useCallback(async (message: string) => {
@@ -135,11 +167,26 @@ const App: React.FC = () => {
   }, [graphData]);
 
   const handleNodeClick = useCallback((node: Node) => {
-    setSelectedNode(node);
-  }, []);
+    if (isCompareMode) {
+        if (!comparisonNodes.node1) {
+            setComparisonNodes({ node1: node, node2: null });
+        } else if (!comparisonNodes.node2) {
+            if (node.id !== comparisonNodes.node1.id) {
+                setComparisonNodes(prev => ({ ...prev, node2: node }));
+            }
+        }
+    } else {
+        setSelectedNode(node);
+    }
+  }, [isCompareMode, comparisonNodes.node1]);
 
   const handleCloseNodeDetails = useCallback(() => {
     setSelectedNode(null);
+  }, []);
+  
+  const handleCloseComparison = useCallback(() => {
+    setIsCompareMode(false);
+    setComparisonNodes({ node1: null, node2: null });
   }, []);
 
   const handleNodeTypeChange = useCallback((nodeType: string, isSelected: boolean) => {
@@ -152,6 +199,16 @@ const App: React.FC = () => {
       }
       return newSet;
     });
+  }, []);
+
+  const handleToggleCompareMode = useCallback(() => {
+      setIsCompareMode(prev => {
+          const newMode = !prev;
+          if (!newMode) { // Exiting compare mode
+              setComparisonNodes({ node1: null, node2: null });
+          }
+          return newMode;
+      });
   }, []);
 
   return (
@@ -179,7 +236,7 @@ const App: React.FC = () => {
           <FileUpload 
             onFileUpload={handleFileUpload} 
             isLoading={isLoadingGraph} 
-            isGraphSaved={isGraphSaved}
+            isGraphSaved={!!graphData}
             onClearStorage={handleClearStorage}
             onTogglePanel={handleTogglePanel}
             onExportGraph={handleExportGraph}
@@ -188,6 +245,13 @@ const App: React.FC = () => {
             uniqueNodeTypes={uniqueNodeTypes}
             selectedNodeTypes={selectedNodeTypes}
             onNodeTypeChange={handleNodeTypeChange}
+            analysisType={analysisType}
+            onAnalysisTypeChange={setAnalysisType}
+            centralityTopN={centralityTopN}
+            onCentralityTopNChange={setCentralityTopN}
+            isCompareMode={isCompareMode}
+            onToggleCompareMode={handleToggleCompareMode}
+            comparisonNode1={comparisonNodes.node1}
           />
         </aside>
 
@@ -212,7 +276,20 @@ const App: React.FC = () => {
                  <p>Upload a document or load a saved graph.</p>
                </div>
             )}
-            {graphData && <GraphVisualization key={isPanelCollapsed ? 'collapsed' : 'expanded'} data={graphData} onNodeClick={handleNodeClick} selectedNodeTypes={selectedNodeTypes} />}
+            {graphData && (
+              <GraphVisualization 
+                key={isPanelCollapsed ? 'collapsed' : 'expanded'} 
+                data={graphData} 
+                onNodeClick={handleNodeClick} 
+                selectedNodeTypes={selectedNodeTypes}
+                analysisType={analysisType}
+                analysisResults={analysisResults}
+                centralityTopN={centralityTopN}
+                isCompareMode={isCompareMode}
+                comparisonNodes={comparisonNodes}
+                comparisonResults={comparisonResults}
+              />
+            )}
           </div>
 
           <div className="lg:col-span-1 bg-slate-800/50 rounded-lg flex flex-col">
@@ -224,12 +301,22 @@ const App: React.FC = () => {
             />
           </div>
 
-          {selectedNode && graphData && (
+          {selectedNode && !isCompareMode && graphData && (
             <NodeDetails 
               node={selectedNode} 
               graphData={graphData} 
               onClose={handleCloseNodeDetails} 
             />
+          )}
+
+          {isCompareMode && comparisonNodes.node1 && comparisonNodes.node2 && graphData && comparisonResults && (
+              <NodeComparisonDetails
+                node1={comparisonNodes.node1}
+                node2={comparisonNodes.node2}
+                results={comparisonResults}
+                graphData={graphData}
+                onClose={handleCloseComparison}
+              />
           )}
         </div>
       </main>
